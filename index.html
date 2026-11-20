@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <!-- Nothing is ever sent off the device: no outside connections allowed. -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; worker-src 'self' blob:; style-src 'self'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' blob: data:; form-action 'none'; base-uri 'self'">
+  <title>FMGC Wind Decoder</title>
+  <meta name="description" content="Offline FMGC wind entry decoder for flight plan PDFs.">
+  <meta name="theme-color" content="#0b2545">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="FMGC Wind">
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="top">
+    <h1>✈️ FMGC Wind Decoder</h1>
+    <span id="net" class="pill">Offline ready</span>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Flight levels</h2>
+      <div class="seg" role="radiogroup" aria-label="Flight levels" id="levels">
+        <button type="button" role="radio" data-levels="3">FL340 / FL380 / FL410</button>
+        <button type="button" role="radio" data-levels="4">FL300 / FL340 / FL380 / FL410</button>
+      </div>
+
+      <h2>FMGC entry rule</h2>
+      <div class="seg" role="radiogroup" aria-label="Entry rule" id="rules">
+        <button type="button" role="radio" data-rule="standard">Standard<small>20° / 20 kt / 5°C</small></button>
+        <button type="button" role="radio" data-rule="less">Less sensitive<small>30° / 30 kt / 5°C</small></button>
+        <button type="button" role="radio" data-rule="custom">Custom<small id="customSummary">set below</small></button>
+      </div>
+      <div id="customBox" class="custom" hidden>
+        <label>Direction °<input id="cDir" type="number" inputmode="numeric" min="1" max="180" value="20"></label>
+        <label>Speed kt<input id="cSpd" type="number" inputmode="numeric" min="1" max="200" value="20"></label>
+        <label>Temp °C<input id="cTmp" type="number" inputmode="numeric" min="1" max="50" value="5"></label>
+      </div>
+
+      <label class="choose" for="file">
+        📄 Choose PDF
+        <input id="file" type="file" accept="application/pdf,.pdf">
+      </label>
+      <p class="hint">The PDF is read on this iPad only. It is never uploaded.</p>
+    </section>
+
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+
+    <section id="warnBox" class="card warn" hidden>
+      <h2>⚠️ Rows that couldn't be decoded</h2>
+      <ul id="warnList"></ul>
+    </section>
+
+    <section id="results" hidden>
+      <div class="card">
+        <details open>
+          <summary><h2>Raw wind &amp; temp rows</h2></summary>
+          <p class="meta">Format: WP FL180 FL240 FL300 FL340 FL380 FL410<br>
+            Selected for chart: <span id="selLevels"></span></p>
+          <pre id="raw"></pre>
+        </details>
+      </div>
+
+      <div class="card">
+        <div class="chart-head">
+          <h2>FMGC wind entry chart</h2>
+          <button type="button" id="copy" class="small">Copy as text</button>
+        </div>
+        <p class="meta">Rule: <span id="selRule"></span> · <b>*</b> = change that triggered the entry</p>
+        <div class="table-wrap">
+          <table id="chart"></table>
+        </div>
+        <p class="legend">⚠️ shear 4–5 &nbsp; 🔴 shear ≥ 6</p>
+      </div>
+    </section>
+  </main>
+
+  <div id="update" class="update" hidden>
+    New version available <button type="button" id="reload" class="small">Update</button>
+  </div>
+</body>
+</html>
