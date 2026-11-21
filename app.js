@@ -1,4 +1,4 @@
-import { LEVEL_SETS, RULES, analyze } from "./decoder.js";
+import { LEVEL_SETS, RULES, DEFAULT_RULE, analyze, ruleLabel } from "./decoder.js";
 import { pdfToLines } from "./pdf-lines.js";
 import { APP_VERSION } from "./version.js";
 
@@ -12,7 +12,8 @@ $("version").textContent = APP_VERSION;
 
 const state = {
   levels: store.get("levels", "3"),
-  rule: store.get("rule", "standard"),
+  // The entry rule always starts on the default (Airbus standard) when the app opens.
+  rule: DEFAULT_RULE,
   custom: (() => {
     try { return JSON.parse(store.get("custom", "")) || null; } catch { return null; }
   })() || { dir: 20, spd: 20, tmp: 5 },
@@ -35,7 +36,9 @@ function currentRule() {
   if (state.rule !== "custom") return { ...RULES[state.rule], fallback: false };
   const c = state.custom;
   const ok = [c.dir, c.spd, c.tmp].every((v) => Number.isInteger(v) && v > 0);
-  return ok ? { ...c, fallback: false } : { ...RULES.standard, fallback: true };
+  return ok
+    ? { name: "Custom", dir: c.dir, spd: c.spd, tmp: c.tmp, fallback: false }
+    : { ...RULES[DEFAULT_RULE], fallback: true };
 }
 
 function syncSettings() {
@@ -63,7 +66,6 @@ $("rules").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-rule]");
   if (!b || b.dataset.rule === state.rule) return;
   state.rule = b.dataset.rule;
-  store.set("rule", state.rule);
   syncSettings();
   run();
 });
@@ -143,7 +145,9 @@ function clearResults() {
 
 function showWarnings(warnings) {
   const items = [...warnings];
-  if (currentRule().fallback) items.unshift({ reason: "Invalid custom rule. Using 20 / 20 / 5.", line: "" });
+  if (currentRule().fallback) {
+    items.unshift({ reason: `Invalid custom rule. Using ${ruleLabel(RULES[DEFAULT_RULE])}.`, line: "" });
+  }
   const list = $("warnList");
   list.replaceChildren(...items.map((w) => {
     const li = el("li", {}, w.reason);
@@ -178,7 +182,7 @@ function run() {
   setStatus(`Using: ${pdf.name} — ${pdf.pages} page${pdf.pages === 1 ? "" : "s"}, ${res.rows.length} wind rows${rep}.`);
 
   $("selLevels").textContent = levels.join(" / ");
-  $("selRule").textContent = `${rule.dir}° / ${rule.spd} kt / ${rule.tmp}°C`;
+  $("selRule").textContent = ruleLabel(rule);
   $("raw").textContent = res.rows.map((r) => r.raw).join("\n");
 
   const head = el("tr");
@@ -198,10 +202,19 @@ function run() {
     body.append(tr);
   }
   $("chart").replaceChildren(thead, body);
+  updateScrollHint();
 
   state.lastText = res.text;
   $("results").hidden = false;
+  updateScrollHint();
 }
+
+// On narrow screens the chart scrolls sideways; say so when it doesn't fit.
+function updateScrollHint() {
+  const wrap = $("chart").parentElement;
+  $("scrollHint").hidden = $("results").hidden || wrap.scrollWidth <= wrap.clientWidth + 1;
+}
+addEventListener("resize", updateScrollHint);
 
 $("copy").addEventListener("click", async () => {
   try {

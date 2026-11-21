@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile, access } from "node:fs/promises";
 import { APP_VERSION } from "../version.js";
 import * as pdfjs from "../vendor/pdfjs/pdf.min.mjs";
-import { analyze, decodeWind, dirDiff, fmt, findWindRows, buildChart, reportText, RULES, LEVEL_SETS } from "../decoder.js";
+import { analyze, ruleLabel, DEFAULT_RULE, decodeWind, dirDiff, fmt, findWindRows, buildChart, reportText, RULES, LEVEL_SETS } from "../decoder.js";
 import { pdfToLines, itemsToLines } from "../pdf-lines.js";
 import { SAMPLE_LINES } from "./sample-rows.js";
 
@@ -50,7 +50,7 @@ test("rows side by side on one line are both found", () => {
 
 test("chart: insert rule, * markers, wrap, turbulence", () => {
   const { rows } = findWindRows(SAMPLE_LINES);
-  const chart = buildChart(rows, LEVEL_SETS["3"], RULES.standard);
+  const chart = buildChart(rows, LEVEL_SETS["3"], RULES.more);
   // BRAVO (360 vs 360) and CHAR1 (010 vs 360 = 10°) are not entries.
   assert.deepEqual(chart.map((c) => c.wp), ["ALPHA", "DELTA", "ECHO", "FOXT", "GOLF"]);
   assert.deepEqual(chart[0].cells.map((c) => c.text), ["360/28/-40", "360/26/-51", "360/24/-59"]);
@@ -64,10 +64,10 @@ test("chart: insert rule, * markers, wrap, turbulence", () => {
   // HOTEL vs GOLF: every change is below 20/20/5, so no entry.
 });
 
-test("less sensitive rule produces fewer entries", () => {
+test("Airbus standard produces no more entries than More sensitive", () => {
   const { rows } = findWindRows(SAMPLE_LINES);
-  const a = buildChart(rows, LEVEL_SETS["4"], RULES.standard);
-  const b = buildChart(rows, LEVEL_SETS["4"], RULES.less);
+  const a = buildChart(rows, LEVEL_SETS["4"], RULES.more);
+  const b = buildChart(rows, LEVEL_SETS["4"], RULES.airbus);
   assert.ok(b.length <= a.length);
   assert.equal(a[0].cells.length, 4);
 });
@@ -75,8 +75,9 @@ test("less sensitive rule produces fewer entries", () => {
 test("text report has the Python layout", () => {
   const { rows } = findWindRows(SAMPLE_LINES);
   const levels = LEVEL_SETS["3"];
-  const txt = reportText(rows, buildChart(rows, levels, RULES.standard), levels, RULES.standard);
+  const txt = reportText(rows, buildChart(rows, levels, RULES.more), levels, RULES.more);
   assert.match(txt, /^--- RAW WIND & TEMP ROWS\nFormat: WP FL180 FL240 FL300 FL340 FL380 FL410\nSelected for chart: FL340 \/ FL380 \/ FL410\n---\n/);
+  assert.match(txt, /\nRule: More sensitive \(20° \/ 20 kt \/ 5°C\)\n/);
   assert.match(txt, /No\.  Waypoint   FL340        FL380        FL410        Turbulence/);
   assert.match(txt, /\n2    DELTA      030\/45\/-39\*  030\/24\/-50\*  030\/22\/-58\*  ⚠️ FL340 shear 5/);
 });
@@ -103,8 +104,8 @@ test("PDF.js reads the fixture PDF into the same rows", async () => {
 
 test("running twice gives exactly one identical set of results", () => {
   const levels = LEVEL_SETS["3"];
-  const a = analyze(SAMPLE_LINES, levels, RULES.standard);
-  const b = analyze(SAMPLE_LINES, levels, RULES.standard);
+  const a = analyze(SAMPLE_LINES, levels, RULES.more);
+  const b = analyze(SAMPLE_LINES, levels, RULES.more);
   assert.deepEqual(b, a);
   assert.equal(b.rows.length, 8);
   assert.equal(b.text.match(/RAW WIND & TEMP ROWS/g).length, 1);
@@ -133,4 +134,12 @@ test("app version matches the service worker version, and every cached file exis
   const assets = [...sw.matchAll(/^\s*"\.\/([^"]*)",?$/gm)].map((m) => m[1]).filter(Boolean);
   assert.ok(assets.length > 5);
   for (const a of assets) await access(new URL("../" + a, import.meta.url));
+});
+
+test("rule presets: Airbus standard first and default, then More sensitive", () => {
+  assert.equal(DEFAULT_RULE, "airbus");
+  assert.deepEqual(Object.keys(RULES), ["airbus", "more"]);
+  assert.equal(ruleLabel(RULES.airbus), "Airbus standard (30° / 30 kt / 5°C)");
+  assert.equal(ruleLabel(RULES.more), "More sensitive (20° / 20 kt / 5°C)");
+  assert.equal(ruleLabel({ name: "Custom", dir: 40, spd: 20, tmp: 5 }), "Custom (40° / 20 kt / 5°C)");
 });

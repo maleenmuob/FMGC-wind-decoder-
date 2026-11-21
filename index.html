@@ -35,8 +35,8 @@
 
       <h2>FMGC entry rule</h2>
       <div class="seg" role="radiogroup" aria-label="Entry rule" id="rules">
-        <button type="button" role="radio" data-rule="standard">Standard<small>20° / 20 kt / 5°C</small></button>
-        <button type="button" role="radio" data-rule="less">Less sensitive<small>30° / 30 kt / 5°C</small></button>
+        <button type="button" role="radio" data-rule="airbus">Airbus standard<small>30° / 30 kt / 5°C</small></button>
+        <button type="button" role="radio" data-rule="more">More sensitive<small>20° / 20 kt / 5°C</small></button>
         <button type="button" role="radio" data-rule="custom">Custom<small id="customSummary">set below</small></button>
       </div>
       <div id="customBox" class="custom" hidden>
@@ -49,7 +49,7 @@
         📄 Choose PDF
         <input id="file" type="file" accept="application/pdf,.pdf">
       </label>
-      <p class="hint">The PDF is read on this iPad only. It is never uploaded.</p>
+      <p class="hint">The PDF is read on this device only. It is never uploaded.</p>
     </section>
 
     <p id="status" class="status" role="status" aria-live="polite"></p>
@@ -75,6 +75,7 @@
           <button type="button" id="copy" class="small">Copy as text</button>
         </div>
         <p class="meta">Rule: <span id="selRule"></span> · <b>*</b> = change that triggered the entry</p>
+        <p id="scrollHint" class="scroll-hint" hidden>Swipe the chart sideways to see all levels →</p>
         <div class="table-wrap">
           <table id="chart"></table>
         </div>

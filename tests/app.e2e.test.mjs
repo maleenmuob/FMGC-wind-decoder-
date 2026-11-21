@@ -8,6 +8,8 @@ import { readFile, cp, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { analyze, LEVEL_SETS, RULES } from "../decoder.js";
+import { SAMPLE_LINES } from "./sample-rows.js";
 
 const require = createRequire(import.meta.url);
 let chromium = null;
@@ -16,6 +18,7 @@ try { ({ chromium } = require("playwright")); } catch { /* not installed */ }
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PDF = path.join(ROOT, "tests/fixtures/sample.pdf");
 const PDF_REPEAT = path.join(ROOT, "tests/fixtures/sample-repeat.pdf");
+const chartLen = (rule, lv = "3") => analyze(SAMPLE_LINES, LEVEL_SETS[lv], rule).chart.length;
 const TYPES = { ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript",
   ".css": "text/css", ".png": "image/png", ".webmanifest": "application/manifest+json", ".pdf": "application/pdf" };
 
@@ -73,10 +76,25 @@ test("app in the browser", { skip: !chromium && "Playwright not installed" }, as
       assert.equal(await page.textContent("#version"), APP_VERSION);
     });
 
+    await t.test("Airbus standard is selected when the app opens", async () => {
+      const checked = () => page.$$eval('#rules button', (bs) => bs.map((b) => [b.textContent.trim(), b.getAttribute("aria-checked")]));
+      assert.deepEqual(await checked(), [
+        ["Airbus standard30° / 30 kt / 5°C", "true"],
+        ["More sensitive20° / 20 kt / 5°C", "false"],
+        ["Customset below", "false"],
+      ]);
+      await page.click('button[data-rule="more"]');
+      await page.reload();
+      assert.equal((await checked())[0][1], "true"); // back to the default on the next open
+      assert.match(await page.textContent(".hint"), /this device only/);
+      assert.doesNotMatch(await page.textContent("body"), /iPad/i);
+    });
+
     await t.test("running twice shows exactly one set of results", async () => {
       await pick(page, PDF);
       const first = await counts(page);
-      assert.deepEqual(first, { rawLists: 1, rawLines: 8, alphaInRaw: 1, tables: 1, chartRows: 5, headerCells: 6, warnings: 1 });
+      assert.deepEqual(first, { rawLists: 1, rawLines: 8, alphaInRaw: 1, tables: 1, chartRows: chartLen(RULES.airbus), headerCells: 6, warnings: 1 });
+      assert.equal(await page.textContent("#selRule"), "Airbus standard (30° / 30 kt / 5°C)");
       await pick(page, PDF);
       assert.deepEqual(await counts(page), first);
     });
@@ -89,8 +107,9 @@ test("app in the browser", { skip: !chromium && "Playwright not installed" }, as
       assert.equal(c.tables, 1);
       assert.equal(c.headerCells, 7);
       assert.equal(c.warnings, 1);
-      await page.click('button[data-rule="less"]');
-      await page.click('button[data-rule="less"]'); // tapping the selected button again does nothing
+      await page.click('button[data-rule="more"]');
+      assert.equal(await page.textContent("#selRule"), "More sensitive (20° / 20 kt / 5°C)");
+      await page.click('button[data-rule="more"]'); // tapping the selected button again does nothing
       await page.click('button[data-rule="custom"]');
       await page.fill("#cDir", "40");
       await page.click('button[data-levels="3"]');
@@ -100,16 +119,16 @@ test("app in the browser", { skip: !chromium && "Playwright not installed" }, as
       assert.equal(c.tables, 1);
       assert.equal(c.headerCells, 6);
       assert.equal(c.warnings, 1);
-      assert.match(await page.textContent("#selRule"), /^40° \/ 20 kt/);
+      assert.equal(await page.textContent("#selRule"), "Custom (40° / 20 kt / 5°C)");
     });
 
     await t.test("a PDF with the table twice shows one set of rows", async () => {
-      await page.click('button[data-rule="standard"]');
+      await page.click('button[data-rule="more"]');
       await pick(page, PDF_REPEAT);
       const c = await counts(page);
       assert.equal(c.rawLines, 8);
       assert.equal(c.alphaInRaw, 1);
-      assert.equal(c.chartRows, 5);
+      assert.equal(c.chartRows, chartLen(RULES.more));
       assert.match(await page.textContent("#status"), /8 repeated rows ignored/);
     });
 
@@ -120,6 +139,41 @@ test("app in the browser", { skip: !chromium && "Playwright not installed" }, as
       assert.equal((await counts(page)).rawLines, 8);
       await ctx.setOffline(false);
     });
+
+    for (const name of ["iPhone 13", "iPhone SE", "Pixel 7"]) {
+      await t.test(`chart stays readable on ${name} (scrolls sideways, not squashed)`, async () => {
+        const { devices } = require("playwright");
+        const phone = await browser.newContext({ ...devices[name] });
+        const p = await phone.newPage();
+        await p.goto(url);
+        await p.click('button[data-levels="4"]');
+        await pick(p, PDF);
+        const m = await p.evaluate(() => {
+          const wrap = document.querySelector(".table-wrap");
+          const cells = [...document.querySelectorAll("#chart tbody td:not(.turb)")];
+          const lines = (c) => { const r = document.createRange(); r.selectNodeContents(c); return new Set([...r.getClientRects()].map((x) => Math.round(x.top))).size; };
+          return {
+            pageOverflow: document.documentElement.scrollWidth - window.innerWidth,
+            tableWider: wrap.scrollWidth > wrap.clientWidth,
+            maxCellLines: Math.max(...cells.map(lines)),
+            minLevelCellWidth: Math.min(...cells.filter((c) => c.cellIndex >= 2).map((c) => c.getBoundingClientRect().width)),
+            hint: !document.getElementById("scrollHint").hidden,
+          };
+        });
+        assert.ok(m.pageOverflow <= 0, "the page itself must not scroll sideways");
+        assert.ok(m.tableWider, "the chart scrolls inside its box");
+        assert.equal(m.maxCellLines, 1, "no chart cell wraps onto two lines");
+        assert.ok(m.minLevelCellWidth >= 90, `level cells keep their width (${m.minLevelCellWidth}px)`);
+        assert.ok(m.hint, "shows the swipe hint");
+        // After swiping, the waypoint column stays in view.
+        await p.$eval(".table-wrap", (w) => { w.scrollLeft = w.scrollWidth; });
+        const wpLeft = await p.$eval("#chart tbody tr td:nth-child(2)", (td) =>
+          td.getBoundingClientRect().left - td.closest(".table-wrap").getBoundingClientRect().left);
+        assert.ok(wpLeft >= 0 && wpLeft < 80, `waypoint column stays visible (${wpLeft}px)`);
+        await p.screenshot({ path: path.join(tmpdir(), `fmgc-${name.replace(/ /g, "-")}.png`), fullPage: true });
+        await phone.close();
+      });
+    }
 
     await t.test("a new version is loaded the next time the app is opened online", async () => {
       await page.goto("about:blank");

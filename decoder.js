@@ -23,10 +23,18 @@ export const LEVEL_SETS = {
   "4": ["FL300", "FL340", "FL380", "FL410"],
 };
 
+// Entry-rule presets, in the order shown in the app. The first is the default.
 export const RULES = {
-  standard: { dir: 20, spd: 20, tmp: 5 },
-  less: { dir: 30, spd: 30, tmp: 5 },
+  airbus: { name: "Airbus standard", dir: 30, spd: 30, tmp: 5 },
+  more: { name: "More sensitive", dir: 20, spd: 20, tmp: 5 },
 };
+export const DEFAULT_RULE = "airbus";
+
+/** e.g. "Airbus standard (30° / 30 kt / 5°C)" */
+export function ruleLabel(rule) {
+  const values = `${rule.dir}° / ${rule.spd} kt / ${rule.tmp}°C`;
+  return rule.name ? `${rule.name} (${values})` : values;
+}
 
 /** Decode one token into {dir, spd, temp, shear}, or null if invalid. */
 export function decodeWind(token) {
@@ -196,7 +204,7 @@ export function reportText(rows, chart, levels, rule) {
   for (const r of rows) L.push(r.raw);
   L.push("--- END RAW ROWS ---", "", "");
   L.push("--- FMGC Wind Entry Chart ---");
-  L.push(`Rule: ${rule.dir}° / ${rule.spd} kt / ${rule.tmp}°C`, "");
+  L.push(`Rule: ${ruleLabel(rule)}`, "");
   let header = `${"No.".padEnd(4)} ${"Waypoint".padEnd(10)} `;
   for (const lvl of levels) header += `${lvl.padEnd(12)} `;
   header += "Turbulence";

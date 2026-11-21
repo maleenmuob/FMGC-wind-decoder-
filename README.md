@@ -8,7 +8,7 @@ Open it from GitHub Pages, then in Safari tap **Share → Add to Home Screen**.
 
 ## What it does
 - Flight levels: FL340/FL380/FL410 or FL300/FL340/FL380/FL410
-- Entry rule: 20°/20 kt/5°C, 30°/30 kt/5°C, or custom
+- Entry rule: Airbus standard 30°/30 kt/5°C (selected when the app opens), More sensitive 20°/20 kt/5°C, or Custom
 - Shows the raw wind rows, then the FMGC chart (`*` = the change that triggered the entry)
 - Turbulence: shear 4–5 ⚠️, shear ≥ 6 🔴
 - Direction changes wrap around 360° (360 → 010 is 10°)
@@ -28,7 +28,7 @@ Open it from GitHub Pages, then in Safari tap **Share → Add to Home Screen**.
 | `Full_FMGC_Decoder_v7_2.py.py` | Original Pyto script |
 
 ## Version and updates
-The version (e.g. `v8.0`) is shown at the top of the app. **For every change**, set the
+The version (e.g. `v8.1`) is shown at the top of the app. **For every change**, set the
 same new version in both `version.js` (`APP_VERSION`) and `sw.js` (`VERSION`). A test
 checks that they match.
 
