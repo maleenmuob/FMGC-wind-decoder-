@@ -9,7 +9,6 @@
   --mark: #fff1b8;
   --warn-bg: #fff4e0;
   --warn-line: #f0b44c;
-  --red-bg: #ffe3e3;
   --top: #0b2545;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   color-scheme: light dark;
@@ -25,7 +24,6 @@
     --mark: #4a3d00;
     --warn-bg: #2b2111;
     --warn-line: #9e6a03;
-    --red-bg: #4a1518;
     --top: #0b1a30;
   }
 }
@@ -193,10 +191,12 @@ table { border-collapse: collapse; width: 100%; font-family: var(--mono); font-s
 th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
 th { font-family: -apple-system, system-ui, sans-serif; font-size: .8rem; color: var(--muted); }
 td.mark { background: var(--mark); font-weight: 700; }
-td.t-red { box-shadow: inset 0 -3px 0 #d1242f; }
-td.t-warn { box-shadow: inset 0 -3px 0 #d4a72c; }
-td.turb { font-family: -apple-system, system-ui, sans-serif; font-size: .85rem; white-space: normal; min-width: 160px; }
-tr.has-red td.turb { background: var(--red-bg); }
+
+.flight { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 24px; border-left: 4px solid var(--accent); }
+.flight-route { margin: 0; font-size: 1.5rem; font-weight: 800; letter-spacing: .02em; font-family: var(--mono); }
+.flight-facts { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 0; }
+.flight-facts dt { color: var(--muted); font-size: .8rem; align-self: center; }
+.flight-facts dd { margin: 0 0 0 -12px; font-weight: 700; font-family: var(--mono); }
 .legend { color: var(--muted); font-size: .85rem; margin: 10px 0 0; }
 
 .update {

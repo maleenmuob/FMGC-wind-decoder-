@@ -161,7 +161,7 @@ function detailCard(w) {
   }
   const table = h("table", { className: "pf-table" });
   const head = h("tr");
-  for (const t of ["Level", "Wind", "Temp", "Shear", "Above MSA (ft)"]) head.append(h("th", { textContent: t }));
+  for (const t of ["Level", "Wind", "Temp", "Shear"]) head.append(h("th", { textContent: t }));
   table.append(h("thead", {}, head));
   const body = h("tbody");
   for (const c of [...w.winds].reverse()) {
@@ -173,8 +173,7 @@ function detailCard(w) {
       h("td", { textContent: c.level + (atPlanned ? " ●" : "") }),
       h("td", { textContent: wind }),
       h("td", { textContent: temp }),
-      h("td", { textContent: c.shear == null ? "—" : `${c.shear}${flag}`, className: band ? `sh-${band}` : "" }),
-      h("td", { textContent: ftNum(gapFt(c.fl, w.msa)) }));
+      h("td", { textContent: c.shear == null ? "—" : `${c.shear}${flag}`, className: band ? `sh-${band}` : "" }));
     body.append(tr);
   }
   table.append(body);
@@ -183,8 +182,8 @@ function detailCard(w) {
   return card;
 }
 
-function gapSection(profile, onPick) {
-  const box = h("div", { className: "pf-gaps" }, h("h3", {}, "Shear 4+ and height above MSA"));
+function shearSection(profile, onPick) {
+  const box = h("div", { className: "pf-gaps" }, h("h3", {}, "Shear 4+ on the route"));
   if (!profile.hasNavLog) {
     box.append(h("p", { className: "meta" }, "No navigation log found in this PDF, so MSA and planned FL can't be shown."));
   } else if (profile.minGap) {
@@ -194,29 +193,28 @@ function gapSection(profile, onPick) {
       h("b", { textContent: ftText(g.gap) }),
       ` on the leg to ${g.name} (${flText(g.fl)}, MSA ${ftText(g.msa)}).`));
   }
-  if (!profile.gaps.length) {
+  if (!profile.shears.length) {
     box.append(h("p", { className: "meta" }, "No shear of 4 or more on the route."));
     return box;
   }
   const table = h("table", { className: "pf-table pf-gap-table" });
   const head = h("tr");
-  for (const t of ["Waypoint", "FL", "Shear", "MSA (ft)", "Above MSA (ft)"]) head.append(h("th", { textContent: t }));
+  for (const t of ["Waypoint", "FL", "Shear", "MSA (ft)"]) head.append(h("th", { textContent: t }));
   table.append(h("thead", {}, head));
   const body = h("tbody");
-  for (const g of profile.gaps) {
+  for (const g of profile.shears) {
     const band = shearBand(g.shear);
     const tr = h("tr", { className: g.atPlanned ? "planned" : "", tabIndex: 0 },
       h("td", { textContent: g.name }),
       h("td", { textContent: g.level + (g.atPlanned ? " ●" : "") }),
       h("td", { textContent: `${g.shear} ${band === "red" ? "🔴" : "⚠️"}`, className: `sh-${band}` }),
-      h("td", { textContent: ftNum(g.msa) }),
-      h("td", { textContent: ftNum(g.gap) }));
+      h("td", { textContent: ftNum(g.msa) }));
     tr.addEventListener("click", () => onPick(g.index, true));
     tr.addEventListener("keydown", (e) => { if (e.key === "Enter") onPick(g.index, true); });
     body.append(tr);
   }
   table.append(body);
-  box.append(h("p", { className: "meta" }, "Smallest gap first. ● = at your planned level (the wind-table level closest to your planned FL). Tap a row to see it on the chart."),
+  box.append(h("p", { className: "meta" }, "Highest shear first. ● = at your planned level (the wind-table level closest to your planned FL). Tap a row to see it on the chart."),
     h("div", { className: "pf-table-wrap" }, table));
   return box;
 }
@@ -262,7 +260,7 @@ export function renderProfile(root, profile, selected, onSelect) {
     h("div", { className: "pf-wrap" }, h("div", { className: "pf-axis" }, axisSvg()), scroll),
     legend(),
     detailSlot,
-    gapSection(profile, pick),
+    shearSection(profile, pick),
   );
   if (selected != null && selected < profile.waypoints.length) pick(selected);
 }

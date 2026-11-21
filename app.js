@@ -3,6 +3,7 @@ import { pdfToLines } from "./pdf-lines.js";
 import { APP_VERSION } from "./version.js";
 import { buildProfile } from "./profile.js";
 import { renderProfile } from "./profile-view.js";
+import { parseFlightInfo, flightTitle } from "./flight-info.js";
 
 const $ = (id) => document.getElementById(id);
 const store = {
@@ -140,6 +141,8 @@ function el(tag, props = {}, text) {
 /** Remove every trace of the previous run. */
 function clearResults() {
   $("results").hidden = true;
+  $("flightInfo").hidden = true;
+  $("flightInfo").replaceChildren();
   $("raw").textContent = "";
   $("chart").replaceChildren();
   $("warnList").replaceChildren();
@@ -162,6 +165,19 @@ function showWarnings(warnings) {
   $("warnBox").hidden = items.length === 0;
 }
 
+/** Which flight plan this is: route big, then flight, date and plan number. */
+function showFlightInfo(info) {
+  const box = $("flightInfo");
+  if (!info) return;
+  const route = info.origin || info.destination ? `${info.origin || "?"} → ${info.destination || "?"}` : "";
+  const facts = el("dl", { className: "flight-facts" });
+  for (const [k, v] of [["Flight", info.flight], ["Date", info.date], ["Plan no.", info.plan]]) {
+    if (v) facts.append(el("dt", {}, k), el("dd", {}, v));
+  }
+  box.replaceChildren(...[route && el("p", { className: "flight-route", id: "flightRoute" }, route), facts].filter(Boolean));
+  box.hidden = false;
+}
+
 /**
  * One run: decode the current PDF with the current buttons and show exactly
  * one fresh copy of the results. Safe to call any number of times.
@@ -174,9 +190,12 @@ function run() {
     return;
   }
 
+  const info = parseFlightInfo(pdf.lines);
+  showFlightInfo(info);
+
   const levels = LEVEL_SETS[state.levels];
   const rule = currentRule();
-  const res = analyze(pdf.lines, levels, rule);
+  const res = analyze(pdf.lines, levels, rule, flightTitle(info));
   const profile = res.rows.length ? buildProfile({ lines: pdf.lines, rows: res.rows, levels, rule }) : null;
   showWarnings([...res.warnings, ...(profile ? profile.warnings : [])]);
 
@@ -192,19 +211,14 @@ function run() {
   $("raw").textContent = res.rows.map((r) => r.raw).join("\n");
 
   const head = el("tr");
-  for (const h of ["No.", "Waypoint", ...levels, "Turbulence"]) head.append(el("th", {}, h));
+  for (const h of ["No.", "Waypoint", ...levels]) head.append(el("th", {}, h));
   const thead = el("thead");
   thead.append(head);
   const body = el("tbody");
   for (const r of res.chart) {
     const tr = el("tr");
     tr.append(el("td", {}, String(r.no)), el("td", {}, r.wp));
-    for (const c of r.cells) {
-      const cls = [c.marked && "mark", c.turb && `t-${c.turb}`].filter(Boolean).join(" ");
-      tr.append(el("td", { className: cls }, c.text));
-    }
-    tr.append(el("td", { className: "turb" }, r.flags.join(", ")));
-    if (r.cells.some((c) => c.turb === "red")) tr.className = "has-red";
+    for (const c of r.cells) tr.append(el("td", { className: c.marked ? "mark" : "" }, c.text));
     body.append(tr);
   }
   $("chart").replaceChildren(thead, body);

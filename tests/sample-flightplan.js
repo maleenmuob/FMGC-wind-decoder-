@@ -9,7 +9,14 @@
 // - a destination with no position/MSA line (QQQQ)
 // - "ROUTE TO FIRST ALTERNATE" followed by the alternate's nav log (ignored)
 // - the whole plan printed twice (only the first copy is used)
+// - the header lines that name the plan (PLAN / CFP), made up as well
 // "@@PAGE" marks a page break in the test PDF; it is not part of the text.
+
+export const HEADER = [
+  "CFP 4321 TST123PPPP TO QQQQ IFR/A320/XTEST COMPUTED 0100Z 05/03/27",
+  "TEST DISPATCH RELEASE TST123",
+  "PLAN 4321 TST123 05MAR PPPP TO QQQQ A320 20/F IFR 05/03/27",
+];
 
 export const NAVLOG = [
   "AWY FIX FREQ FL TAS GS MCSE ZDIST ZTIME ETA/ATA REMT FU",
@@ -57,7 +64,7 @@ export const NAVLOG = [
 
 // FL180 FL240 FL300 FL340 FL380 FL410
 export const WINDS = [
-  "START OF WIND AND TEMPERATURE SUMMARY TEST TO QQQQ",
+  "START OF WIND AND TEMPERATURE SUMMARY PPPP TO QQQQ",
   "FL / 18000 24000 30000 34000 38000 41000",
   "ABCDE 27020M05-01 27025M18-02 27030M30-01 27035M40-01 27030M51-00 27028M59-01",
   "FGHIJ 28022M05-02 28027M18-04 28032M30-02 28036M40-02 28031M51-01 28029M59-01",
@@ -68,7 +75,7 @@ export const WINDS = [
   "QQQQ  33010P02-00 33015M15-01 33020M28-01 33025M38-01 33020M49-01 33018M57-01",
 ];
 
-const ONE_COPY = ["TEST FLIGHT PLAN (MADE UP)", ...NAVLOG, "@@PAGE", ...WINDS];
+const ONE_COPY = ["TEST FLIGHT PLAN (MADE UP)", ...HEADER, ...NAVLOG, "@@PAGE", ...WINDS];
 
 // The full document: the plan printed twice.
 export const FLIGHTPLAN = [...ONE_COPY, "@@PAGE", ...ONE_COPY];

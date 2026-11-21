@@ -58,7 +58,8 @@ def build_flightplan(name="sample-flightplan.pdf"):
     blocks = dict(re.findall(r"export const (\w+) = \[(.*?)\];", src, re.S))
     nav = re.findall(r'"(.*)",', blocks["NAVLOG"])
     winds = re.findall(r'"(.*)",', blocks["WINDS"])
-    copy = ["TEST FLIGHT PLAN (MADE UP)", *nav, "@@PAGE", *winds]
+    header = re.findall(r'"(.*)",', blocks["HEADER"])
+    copy = ["TEST FLIGHT PLAN (MADE UP)", *header, *nav, "@@PAGE", *winds]
     out = here / "fixtures" / name
     c = canvas.Canvas(str(out), pagesize=(842, 595))
     y = 560

@@ -203,7 +203,7 @@ export function buildProfile({ lines, rows, levels, rule }) {
     }
   });
 
-  return { waypoints, worst, hasNavLog: points.length > 0, warnings, gaps: gapList(waypoints), minGap: minCruiseGap(waypoints) };
+  return { waypoints, worst, hasNavLog: points.length > 0, warnings, shears: shearList(waypoints), minGap: minCruiseGap(waypoints) };
 }
 
 /** Height of a flight level above an MSA, in ft (FL × 100 − MSA). */
@@ -220,22 +220,21 @@ export function nearestLevels(plannedFl) {
 }
 
 /**
- * One row per shear value of 4+: waypoint, FL, shear, MSA, gap.
+ * One row per shear value of 4+: waypoint, FL, shear, MSA.
  * Rows at (nearest wind-table level to) the planned FL are marked.
- * Sorted smallest gap first (unknown MSA last).
+ * Sorted highest shear first, then in route order.
  */
-export function gapList(waypoints) {
+export function shearList(waypoints) {
   const out = [];
   waypoints.forEach((w, index) => {
     const near = nearestLevels(w.plannedFl);
     for (const c of w.winds) {
       if (c.shear == null || c.shear < 4) continue;
       out.push({ index, name: w.name, level: c.level, fl: c.fl, shear: c.shear, msa: w.msa,
-        gap: gapFt(c.fl, w.msa), atPlanned: near.includes(c.fl) });
+        atPlanned: near.includes(c.fl) });
     }
   });
-  return out.sort((a, b) =>
-    (a.gap ?? Infinity) - (b.gap ?? Infinity) || b.shear - a.shear || a.index - b.index);
+  return out.sort((a, b) => b.shear - a.shear || a.index - b.index || b.fl - a.fl);
 }
 
 /**

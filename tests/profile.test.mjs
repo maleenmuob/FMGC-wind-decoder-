@@ -69,18 +69,19 @@ test("worst shear and smallest gap en route (TOC to TOD)", () => {
   assert.deepEqual(p.minGap, { index: 3, name: "PQRST", fl: 340, msa: 15200, gap: 18800 });
 });
 
-test("gap list: every shear 4+, smallest gap first, planned level marked", () => {
+test("shear list: every shear 4+, highest first then route order, planned level marked", () => {
   const p = profileOf(LINES);
-  assert.deepEqual(p.gaps.map((g) => [g.name, g.level, g.shear, g.msa, g.gap, g.atPlanned]), [
-    ["PQRST", "FL180", 7, 15200, 2800, false],
-    ["PQRST", "FL240", 5, 15200, 8800, false],
-    ["FGHIJ", "FL240", 4, 6000, 18000, false],
-    ["PQRST", "FL340", 6, 15200, 18800, true],
-    ["KLMNO", "FL300", 5, 9800, 20200, false],
-    ["UVWXY", "FL340", 4, 13200, 20800, true], // FL360 is equally close to FL340 and FL380
-    ["KLMNO", "FL340", 4, 9800, 24200, true],
-    ["UVWXY", "FL380", 5, 13200, 24800, true],
+  assert.deepEqual(p.shears.map((g) => [g.name, g.level, g.shear, g.msa, g.atPlanned]), [
+    ["PQRST", "FL180", 7, 15200, false],
+    ["PQRST", "FL340", 6, 15200, true],
+    ["KLMNO", "FL300", 5, 9800, false],
+    ["PQRST", "FL240", 5, 15200, false],
+    ["UVWXY", "FL380", 5, 13200, true], // FL360 is equally close to FL340 and FL380
+    ["FGHIJ", "FL240", 4, 6000, false],
+    ["KLMNO", "FL340", 4, 9800, true],
+    ["UVWXY", "FL340", 4, 13200, true],
   ]);
+  assert.ok(p.shears.every((g) => !("gap" in g))); // no "above MSA" per level
 });
 
 test("FMGC dots follow the FMGC chart for the chosen levels and rule", () => {
@@ -126,6 +127,6 @@ test("PDF.js reads the made-up flight plan PDF the same as the text", async () =
   const fromPdf = profileOf(lines);
   const fromText = profileOf(LINES);
   assert.deepEqual(fromPdf.waypoints.map((w) => [w.name, w.msa, w.plannedFl]), fromText.waypoints.map((w) => [w.name, w.msa, w.plannedFl]));
-  assert.deepEqual(fromPdf.gaps, fromText.gaps);
+  assert.deepEqual(fromPdf.shears, fromText.shears);
   assert.deepEqual(fromPdf.minGap, fromText.minGap);
 });
