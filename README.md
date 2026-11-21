@@ -20,17 +20,27 @@ Open it from GitHub Pages, then in Safari tap **Share → Add to Home Screen**.
 | File | Purpose |
 | --- | --- |
 | `index.html`, `styles.css`, `app.js` | The app page and buttons |
+| `version.js` | Version number shown in the app |
 | `decoder.js` | Decoding and chart logic (port of the Python script) |
 | `pdf-lines.js` | Rebuilds text lines from PDF.js text positions |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Offline support and Home Screen app |
 | `vendor/pdfjs/` | PDF.js 4.10.38 (legacy build), stored locally |
 | `Full_FMGC_Decoder_v7_2.py.py` | Original Pyto script |
 
-When you change any app file, bump `VERSION` in `sw.js` so installed copies update.
-The app will then show an **Update** button.
+## Version and updates
+The version (e.g. `v8.0`) is shown at the top of the app. **For every change**, set the
+same new version in both `version.js` (`APP_VERSION`) and `sw.js` (`VERSION`). A test
+checks that they match.
+
+The next time the app is opened with internet, it downloads the new version and
+switches to it a moment later. If results are already on screen, it waits and
+shows an **Update now** button instead, so nothing is lost.
 
 ## Tests
-Uses made-up rows only (`tests/sample-rows.js`, `tests/fixtures/sample.pdf`).
+Uses made-up rows only (`tests/sample-rows.js`, and PDFs built from them by
+`tests/make_fixture.py`). The browser test (`tests/app.e2e.test.mjs`) runs only if
+Playwright is installed. It picks a PDF twice, switches every button, and checks that
+exactly one set of results is shown. It also checks offline use and updating.
 
 ```
 node --test tests/*.test.mjs
