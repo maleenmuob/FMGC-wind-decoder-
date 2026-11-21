@@ -140,7 +140,14 @@ h2 { font-size: 1rem; margin: 0 0 10px; }
 .warn { background: var(--warn-bg); border-color: var(--warn-line); }
 .warn ul { margin: 0; padding-left: 20px; }
 .warn li { margin-bottom: 6px; }
-.warn code { font-family: var(--mono); font-size: .85rem; word-break: break-all; }
+.warn code {
+  display: block;
+  font-family: var(--mono);
+  font-size: .85rem;
+  white-space: pre;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
 
 details summary { cursor: pointer; list-style: none; }
 details summary::-webkit-details-marker { display: none; }
@@ -162,6 +169,8 @@ pre {
 .chart-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .chart-head h2 { margin: 0; }
 button.small {
+  white-space: nowrap;
+  flex-shrink: 0;
   font: inherit;
   font-size: .9rem;
   padding: 8px 14px;
@@ -172,7 +181,14 @@ button.small {
   cursor: pointer;
 }
 
-.table-wrap { overflow-x: auto; }
+/* The chart never squashes: on narrow screens it scrolls sideways, with the
+   No. and Waypoint columns staying put. */
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
+.scroll-hint { color: var(--muted); font-size: .85rem; margin: 0 0 6px; }
+th:nth-child(1), td:nth-child(1),
+th:nth-child(2), td:nth-child(2) { position: sticky; background: var(--card); z-index: 1; }
+th:nth-child(1), td:nth-child(1) { left: 0; width: 3rem; min-width: 3rem; max-width: 3rem; }
+th:nth-child(2), td:nth-child(2) { left: 3rem; box-shadow: 6px 0 6px -6px rgba(0,0,0,.35); }
 table { border-collapse: collapse; width: 100%; font-family: var(--mono); font-size: .95rem; }
 th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
 th { font-family: -apple-system, system-ui, sans-serif; font-size: .8rem; color: var(--muted); }
