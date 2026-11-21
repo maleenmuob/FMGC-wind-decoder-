@@ -1,7 +1,7 @@
 // Offline cache for the FMGC Wind Decoder.
 // Must match APP_VERSION in version.js. Bump both for every change:
 // a changed sw.js is what makes installed copies download the new version.
-const VERSION = "v8.2";
+const VERSION = "v8.3";
 const CACHE = `fmgc-wind-${VERSION}`;
 const ASSETS = [
   "./",
@@ -11,6 +11,8 @@ const ASSETS = [
   "./decoder.js",
   "./pdf-lines.js",
   "./version.js",
+  "./profile.js",
+  "./profile-view.js",
   "./manifest.webmanifest",
   "./vendor/pdfjs/pdf.min.mjs",
   "./vendor/pdfjs/pdf.worker.min.mjs",

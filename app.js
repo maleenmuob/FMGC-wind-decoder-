@@ -1,6 +1,8 @@
 import { LEVEL_SETS, RULES, DEFAULT_RULE, analyze, ruleLabel } from "./decoder.js";
 import { pdfToLines } from "./pdf-lines.js";
 import { APP_VERSION } from "./version.js";
+import { buildProfile } from "./profile.js";
+import { renderProfile } from "./profile-view.js";
 
 const $ = (id) => document.getElementById(id);
 const store = {
@@ -19,6 +21,7 @@ const state = {
   })() || { dir: 20, spd: 20, tmp: 5 },
   // The current PDF: its text lines are kept so button changes can re-run on it.
   pdf: null, // { name, pages, lines }
+  profileSel: null, // waypoint shown in the profile detail card
   lastText: "",
 };
 
@@ -106,6 +109,7 @@ $("file").addEventListener("change", async (e) => {
 
   const id = ++fileRun;
   state.pdf = null;
+  state.profileSel = null;
   clearResults();
   setStatus(`Reading ${file.name}…`);
 
@@ -139,6 +143,7 @@ function clearResults() {
   $("raw").textContent = "";
   $("chart").replaceChildren();
   $("warnList").replaceChildren();
+  $("profile").replaceChildren();
   $("warnBox").hidden = true;
   state.lastText = "";
 }
@@ -172,7 +177,8 @@ function run() {
   const levels = LEVEL_SETS[state.levels];
   const rule = currentRule();
   const res = analyze(pdf.lines, levels, rule);
-  showWarnings(res.warnings);
+  const profile = res.rows.length ? buildProfile({ lines: pdf.lines, rows: res.rows, levels, rule }) : null;
+  showWarnings([...res.warnings, ...(profile ? profile.warnings : [])]);
 
   if (!res.rows.length) {
     setStatus(`⚠️ Could not find valid wind rows in ${pdf.name}.`, true);
@@ -207,6 +213,7 @@ function run() {
   state.lastText = res.text;
   $("results").hidden = false;
   updateScrollHint();
+  renderProfile($("profile"), profile, state.profileSel, (i) => { state.profileSel = i; });
 }
 
 // On narrow screens the chart scrolls sideways; say so when it doesn't fit.

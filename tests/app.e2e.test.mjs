@@ -18,6 +18,7 @@ try { ({ chromium } = require("playwright")); } catch { /* not installed */ }
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PDF = path.join(ROOT, "tests/fixtures/sample.pdf");
 const PDF_REPEAT = path.join(ROOT, "tests/fixtures/sample-repeat.pdf");
+const PDF_PLAN = path.join(ROOT, "tests/fixtures/sample-flightplan.pdf"); // made-up flight plan
 const chartLen = (rule, lv = "3") => analyze(SAMPLE_LINES, LEVEL_SETS[lv], rule).chart.length;
 const TYPES = { ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript",
   ".css": "text/css", ".png": "image/png", ".webmanifest": "application/manifest+json", ".pdf": "application/pdf" };
@@ -132,6 +133,90 @@ test("app in the browser", { skip: !chromium && "Playwright not installed" }, as
       assert.equal(c.chartRows, chartLen(RULES.more));
       assert.match(await page.textContent("#status"), /8 repeated rows ignored/);
     });
+
+    await t.test("Shear & MSA profile: headline, jump, detail card, gap list", async () => {
+      await page.click('button[data-rule="airbus"]');
+      await page.click('button[data-levels="3"]');
+      await pick(page, PDF_PLAN);
+      await page.waitForSelector("#pfHeadline");
+      assert.equal(await page.textContent("#pfHeadline"), "Max shear 7 at PQRST (FL180)");
+      assert.equal(await page.$$eval("#profile .pf-wp-label", (l) => l.map((x) => x.textContent).join(" ")),
+        "ABCDE FGHIJ KLMNO PQRST UVWXY VWXYZ QQQQ");
+      assert.equal(await page.$$eval("#profile .pf-box", (b) => b.length), 7 * 6);
+      assert.equal(await page.$$eval("#profile .pf-box.red", (b) => b.map((x) => x.textContent).join(",")), "7,6");
+      assert.equal(await page.$$eval("#profile .pf-msa-num", (b) => b.map((x) => x.textContent).join(",")), "045,060,098,152,132,110");
+      assert.match(await page.textContent("#profile .pf-mingap"), /18,800 ft on the leg to PQRST \(FL340, MSA 15,200 ft\)/);
+
+      // Gap list: 8 rows, smallest first, 4 at the planned level.
+      const gaps = await page.$$eval("#profile .pf-gap-table tbody tr", (trs) => trs.map((tr) => [tr.cells[0].textContent, tr.cells[1].textContent, tr.cells[4].textContent, tr.className]));
+      assert.equal(gaps.length, 8);
+      assert.deepEqual(gaps[0], ["PQRST", "FL180", "2,800", ""]);
+      assert.deepEqual(gaps[3], ["PQRST", "FL340 ●", "18,800", "planned"]);
+      assert.equal(gaps.filter((g) => g[3] === "planned").length, 4);
+
+      // Jump to worst shear opens the detail card.
+      await page.click("#jumpWorst");
+      assert.match(await page.textContent("#pfDetail h3"), /^PQRST/);
+      const facts = await page.$$eval("#pfDetail dd", (d) => d.map((x) => x.textContent));
+      assert.deepEqual(facts, ["FL340", "15,200 ft", "18,800 ft", "6"]);
+      const rows = await page.$$eval("#pfDetail tbody tr", (trs) => trs.map((tr) => [...tr.cells].map((c) => c.textContent)));
+      assert.equal(rows.length, 6);
+      assert.deepEqual(rows[2], ["FL340 ●", "300/60", "-41°C", "6 🔴", "18,800"]);
+      assert.deepEqual(rows[5], ["FL180", "300/30", "-6°C", "7 🔴", "2,800"]);
+
+      // Tapping a waypoint shows its card (the slash name keeps its '/').
+      await page.click('#profile .pf-hit[data-index="2"]');
+      assert.equal(await page.textContent("#pfDetail h3"), "KLMNO (KLMNO/)");
+      // Tapping a gap-list row selects that waypoint.
+      await page.click("#profile .pf-gap-table tbody tr:nth-child(3)");
+      assert.equal(await page.textContent("#pfDetail h3"), "FGHIJ");
+    });
+
+    await t.test("profile: dots follow the FMGC chart, and re-runs never duplicate it", async () => {
+      const dots = async () => page.$$eval("#profile .pf-fmgc-dot", (d) => d.length);
+      const chartRows = async () => page.$$eval("#chart tbody tr", (r) => r.length);
+      assert.equal(await dots(), await chartRows());
+      await page.click('button[data-rule="more"]');
+      assert.equal(await dots(), await chartRows());
+      assert.equal(await page.textContent("#pfDetail h3"), "FGHIJ"); // selection kept on re-run
+      await pick(page, PDF_PLAN);
+      await pick(page, PDF_PLAN);
+      assert.equal(await page.$$eval("#profile .pf-scroll svg", (s) => s.length), 1);
+      assert.equal(await page.$$eval("#profile .pf-gap-table", (s) => s.length), 1);
+      assert.equal(await page.$$eval("#pfHeadline", (s) => s.length), 1);
+      assert.equal(await page.$$eval("#pfDetail", (s) => s.length), 0); // new PDF: no stale card
+    });
+
+    for (const name of ["iPhone SE", "iPad Pro 11"]) {
+      await t.test(`profile works on ${name}: sideways scroll with the FL axis pinned`, async () => {
+        const { devices } = require("playwright");
+        const dev = await browser.newContext({ ...devices[name] });
+        const p = await dev.newPage();
+        await p.goto(url);
+        await pick(p, PDF_PLAN);
+        await p.waitForSelector("#pfHeadline");
+        const m = await p.evaluate(() => ({
+          pageOverflow: document.documentElement.scrollWidth - window.innerWidth,
+          axisLeft: document.querySelector(".pf-axis").getBoundingClientRect().left,
+        }));
+        assert.ok(m.pageOverflow <= 0, "the page itself must not scroll sideways");
+        await p.tap("#jumpWorst");
+        await p.$eval(".pf-scroll", (s) => { s.scrollLeft = s.scrollWidth; });
+        const after = await p.evaluate(() => ({
+          axisLeft: document.querySelector(".pf-axis").getBoundingClientRect().left,
+          axisText: document.querySelector(".pf-axis").textContent,
+        }));
+        assert.equal(after.axisLeft, m.axisLeft, "FL axis stays put while the chart scrolls");
+        assert.match(after.axisText, /FL180.*FL240.*FL300.*FL340.*FL380.*FL410/);
+        await p.$eval(".pf-scroll", (s) => { s.scrollLeft = 0; });
+        await p.tap('#profile .pf-hit[data-index="0"]');
+        assert.match(await p.textContent("#pfDetail h3"), /^ABCDE/);
+        const tables = await p.$$eval(".pf-table-wrap", (ws) => ws.map((w) => w.scrollWidth - w.clientWidth));
+        assert.deepEqual(tables, [0, 0], "detail and gap tables fit the screen without sideways scrolling");
+        await p.screenshot({ path: path.join(tmpdir(), `fmgc-profile-${name.replace(/ /g, "-")}.png`), fullPage: true });
+        await dev.close();
+      });
+    }
 
     await t.test("works offline", async () => {
       await ctx.setOffline(true);
