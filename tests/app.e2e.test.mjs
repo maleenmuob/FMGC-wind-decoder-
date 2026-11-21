@@ -87,6 +87,7 @@ test("app in the browser", { skip: !chromium && "Playwright not installed" }, as
       await page.reload();
       assert.equal((await checked())[0][1], "true"); // back to the default on the next open
       assert.match(await page.textContent(".hint"), /this device only/);
+      assert.match(await page.textContent(".choose"), /Upload flight plan/);
       assert.doesNotMatch(await page.textContent("body"), /iPad/i);
     });
 
