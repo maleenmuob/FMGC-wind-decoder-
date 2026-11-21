@@ -9,8 +9,9 @@ Open it from GitHub Pages, then in Safari tap **Share → Add to Home Screen**.
 ## What it does
 - Flight levels: FL340/FL380/FL410 or FL300/FL340/FL380/FL410
 - Entry rule: Airbus standard 30°/30 kt/5°C (selected when the app opens), More sensitive 20°/20 kt/5°C, or Custom
+- Shows which flight plan it is: origin → destination, flight number, date and plan
+  number (from the PLAN line, else the CFP line, else the wind summary)
 - Shows the raw wind rows, then the FMGC chart (`*` = the change that triggered the entry)
-- Turbulence: shear 4–5 ⚠️, shear ≥ 6 🔴
 - Direction changes wrap around 360° (360 → 010 is 10°)
 - Positive temperatures (`P` instead of `M`) are accepted
 - Rows that look like wind data but can't be decoded are listed as warnings
@@ -23,7 +24,7 @@ Open it from GitHub Pages, then in Safari tap **Share → Add to Home Screen**.
     of the pieces is used.
   - The planned FL line, and dots under the waypoints that are in the FMGC chart.
   - Tap a waypoint for details, or use "Jump to worst shear".
-  - The gap list shows every shear of 4+, with its height above MSA, smallest gap first.
+  - The shear list shows every shear of 4+ with the leg MSA, highest shear first.
     ● marks rows at your planned level (the closest wind-table level; both levels on a tie).
   - Above the list: the smallest gap between your planned level and MSA, from TOC to TOD.
 
@@ -33,15 +34,16 @@ Open it from GitHub Pages, then in Safari tap **Share → Add to Home Screen**.
 | `index.html`, `styles.css`, `app.js` | The app page and buttons |
 | `version.js` | Version number shown in the app |
 | `decoder.js` | Decoding and chart logic (port of the Python script) |
-| `profile.js` | Navigation log parsing, Shear & MSA profile and gap list |
-| `profile-view.js` | Draws the profile chart, detail card and gap list |
+| `profile.js` | Navigation log parsing, Shear & MSA profile and shear list |
+| `profile-view.js` | Draws the profile chart, detail card and shear list |
+| `flight-info.js` | Reads origin, destination, flight, plan number and date |
 | `pdf-lines.js` | Rebuilds text lines from PDF.js text positions |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Offline support and Home Screen app |
 | `vendor/pdfjs/` | PDF.js 4.10.38 (legacy build), stored locally |
 | `Full_FMGC_Decoder_v7_2.py.py` | Original Pyto script |
 
 ## Version and updates
-The version (e.g. `v8.3`) is shown at the top of the app. **For every change**, set the
+The version (e.g. `v8.4`) is shown at the top of the app. **For every change**, set the
 same new version in both `version.js` (`APP_VERSION`) and `sw.js` (`VERSION`). A test
 checks that they match.
 

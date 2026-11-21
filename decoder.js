@@ -71,21 +71,6 @@ export function dirDiff(a, b) {
   return Math.min(d, 360 - d);
 }
 
-/** 'red' for shear >= 6, 'warn' for 4–5, null otherwise. */
-export function turbLevel(d) {
-  if (!d) return null;
-  if (d.shear >= 6) return "red";
-  if (d.shear >= 4) return "warn";
-  return null;
-}
-
-export function turbFlag(d, level) {
-  const t = turbLevel(d);
-  if (t === "red") return `🔴 ${level} shear ${d.shear}`;
-  if (t === "warn") return `⚠️ ${level} shear ${d.shear}`;
-  return "";
-}
-
 function changed(a, b, rule) {
   if (!a || !b) return false;
   return (
@@ -163,16 +148,16 @@ export function findWindRows(lines) {
 }
 
 /** Everything one run produces, built from scratch each time. */
-export function analyze(lines, levels, rule) {
+export function analyze(lines, levels, rule, title = "") {
   const { rows, warnings, repeated } = findWindRows(lines);
   const chart = buildChart(rows, levels, rule);
-  return { rows, warnings, repeated, chart, text: reportText(rows, chart, levels, rule) };
+  return { rows, warnings, repeated, chart, text: reportText(rows, chart, levels, rule, title) };
 }
 
 /**
  * Build the FMGC chart.
  * levels: e.g. ["FL340","FL380","FL410"]; rule: {dir, spd, tmp}.
- * Returns [{no, wp, cells:[{text, marked, decoded, turb}], flags:[string]}]
+ * Returns [{no, wp, cells:[{text, marked, decoded}]}]
  */
 export function buildChart(rows, levels, rule) {
   const out = [];
@@ -184,19 +169,22 @@ export function buildChart(rows, levels, rule) {
 
     const cells = decoded.map((d, i) => {
       const marked = !!(ref && changed(ref[i], d, rule));
-      return { text: fmt(d) + (marked ? "*" : ""), marked, decoded: d, turb: turbLevel(d) };
+      return { text: fmt(d) + (marked ? "*" : ""), marked, decoded: d };
     });
-    const flags = decoded.map((d, i) => turbFlag(d, levels[i])).filter(Boolean);
-    out.push({ no, wp: row.wp, cells, flags });
+    out.push({ no, wp: row.wp, cells });
     ref = decoded;
     no++;
   }
   return out;
 }
 
-/** Plain-text report in the same layout as the Python script's output. */
-export function reportText(rows, chart, levels, rule) {
+/**
+ * Plain-text report in the same layout as the Python script's output.
+ * `title` (optional) is a first line naming the flight plan.
+ */
+export function reportText(rows, chart, levels, rule, title = "") {
   const L = [];
+  if (title) L.push(title, "");
   L.push("--- RAW WIND & TEMP ROWS");
   L.push(`Format: WP ${ALL_LEVELS.join(" ")}`);
   L.push(`Selected for chart: ${levels.join(" / ")}`);
@@ -207,12 +195,11 @@ export function reportText(rows, chart, levels, rule) {
   L.push(`Rule: ${ruleLabel(rule)}`, "");
   let header = `${"No.".padEnd(4)} ${"Waypoint".padEnd(10)} `;
   for (const lvl of levels) header += `${lvl.padEnd(12)} `;
-  header += "Turbulence";
+  header = header.trimEnd();
   L.push(header, "-".repeat(header.length));
   for (const c of chart) {
     let line = `${String(c.no).padEnd(4)} ${c.wp.padEnd(10)} `;
     for (const cell of c.cells) line += `${cell.text.padEnd(12)} `;
-    line += c.flags.join(", ");
     L.push(line.trimEnd());
   }
   return L.join("\n");

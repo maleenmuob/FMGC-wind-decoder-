@@ -95,7 +95,9 @@ test("app in the browser", { skip: !chromium && "Playwright not installed" }, as
     await t.test("running twice shows exactly one set of results", async () => {
       await pick(page, PDF);
       const first = await counts(page);
-      assert.deepEqual(first, { rawLists: 1, rawLines: 8, alphaInRaw: 1, tables: 1, chartRows: chartLen(RULES.airbus), headerCells: 6, warnings: 1 });
+      assert.deepEqual(first, { rawLists: 1, rawLines: 8, alphaInRaw: 1, tables: 1, chartRows: chartLen(RULES.airbus), headerCells: 5, warnings: 1 });
+      assert.doesNotMatch(await page.$eval("#chart", (t) => t.closest(".card").textContent), /Turbulence|shear|⚠️|🔴/); // no turbulence in the wind chart
+      assert.equal(await page.isHidden("#flightInfo"), true); // the plain test PDF has no plan header
       assert.equal(await page.textContent("#selRule"), "Airbus standard (30° / 30 kt / 5°C)");
       await pick(page, PDF);
       assert.deepEqual(await counts(page), first);
@@ -107,7 +109,7 @@ test("app in the browser", { skip: !chromium && "Playwright not installed" }, as
       assert.equal(c.rawLines, 8);
       assert.equal(c.alphaInRaw, 1);
       assert.equal(c.tables, 1);
-      assert.equal(c.headerCells, 7);
+      assert.equal(c.headerCells, 6);
       assert.equal(c.warnings, 1);
       await page.click('button[data-rule="more"]');
       assert.equal(await page.textContent("#selRule"), "More sensitive (20° / 20 kt / 5°C)");
@@ -119,7 +121,7 @@ test("app in the browser", { skip: !chromium && "Playwright not installed" }, as
       assert.equal(c.rawLines, 8);
       assert.equal(c.alphaInRaw, 1);
       assert.equal(c.tables, 1);
-      assert.equal(c.headerCells, 6);
+      assert.equal(c.headerCells, 5);
       assert.equal(c.warnings, 1);
       assert.equal(await page.textContent("#selRule"), "Custom (40° / 20 kt / 5°C)");
     });
@@ -134,11 +136,15 @@ test("app in the browser", { skip: !chromium && "Playwright not installed" }, as
       assert.match(await page.textContent("#status"), /8 repeated rows ignored/);
     });
 
-    await t.test("Shear & MSA profile: headline, jump, detail card, gap list", async () => {
+    await t.test("flight plan header, Shear & MSA profile: headline, jump, detail card, shear list", async () => {
       await page.click('button[data-rule="airbus"]');
       await page.click('button[data-levels="3"]');
       await pick(page, PDF_PLAN);
       await page.waitForSelector("#pfHeadline");
+      // Which flight plan this is.
+      assert.equal(await page.isVisible("#flightInfo"), true);
+      assert.equal(await page.textContent("#flightRoute"), "PPPP → QQQQ");
+      assert.deepEqual(await page.$$eval("#flightInfo dd", (d) => d.map((x) => x.textContent)), ["TST123", "5 Mar 2027", "4321"]);
       assert.equal(await page.textContent("#pfHeadline"), "Max shear 7 at PQRST (FL180)");
       assert.equal(await page.$$eval("#profile .pf-wp-label", (l) => l.map((x) => x.textContent).join(" ")),
         "ABCDE FGHIJ KLMNO PQRST UVWXY VWXYZ QQQQ");
@@ -147,12 +153,13 @@ test("app in the browser", { skip: !chromium && "Playwright not installed" }, as
       assert.equal(await page.$$eval("#profile .pf-msa-num", (b) => b.map((x) => x.textContent).join(",")), "045,060,098,152,132,110");
       assert.match(await page.textContent("#profile .pf-mingap"), /18,800 ft on the leg to PQRST \(FL340, MSA 15,200 ft\)/);
 
-      // Gap list: 8 rows, smallest first, 4 at the planned level.
-      const gaps = await page.$$eval("#profile .pf-gap-table tbody tr", (trs) => trs.map((tr) => [tr.cells[0].textContent, tr.cells[1].textContent, tr.cells[4].textContent, tr.className]));
-      assert.equal(gaps.length, 8);
-      assert.deepEqual(gaps[0], ["PQRST", "FL180", "2,800", ""]);
-      assert.deepEqual(gaps[3], ["PQRST", "FL340 ●", "18,800", "planned"]);
-      assert.equal(gaps.filter((g) => g[3] === "planned").length, 4);
+      // Shear list: 8 rows, highest shear first, 4 at the planned level, no "Above MSA".
+      assert.doesNotMatch(await page.textContent("#profile"), /Above MSA/);
+      const list = await page.$$eval("#profile .pf-gap-table tbody tr", (trs) => trs.map((tr) => [...tr.cells].map((c) => c.textContent).concat(tr.className)));
+      assert.equal(list.length, 8);
+      assert.deepEqual(list[0], ["PQRST", "FL180", "7 🔴", "15,200", ""]);
+      assert.deepEqual(list[1], ["PQRST", "FL340 ●", "6 🔴", "15,200", "planned"]);
+      assert.equal(list.filter((g) => g.at(-1) === "planned").length, 4);
 
       // Jump to worst shear opens the detail card.
       await page.click("#jumpWorst");
@@ -161,14 +168,14 @@ test("app in the browser", { skip: !chromium && "Playwright not installed" }, as
       assert.deepEqual(facts, ["FL340", "15,200 ft", "18,800 ft", "6"]);
       const rows = await page.$$eval("#pfDetail tbody tr", (trs) => trs.map((tr) => [...tr.cells].map((c) => c.textContent)));
       assert.equal(rows.length, 6);
-      assert.deepEqual(rows[2], ["FL340 ●", "300/60", "-41°C", "6 🔴", "18,800"]);
-      assert.deepEqual(rows[5], ["FL180", "300/30", "-6°C", "7 🔴", "2,800"]);
+      assert.deepEqual(rows[2], ["FL340 ●", "300/60", "-41°C", "6 🔴"]);
+      assert.deepEqual(rows[5], ["FL180", "300/30", "-6°C", "7 🔴"]);
 
       // Tapping a waypoint shows its card (the slash name keeps its '/').
       await page.click('#profile .pf-hit[data-index="2"]');
       assert.equal(await page.textContent("#pfDetail h3"), "KLMNO (KLMNO/)");
-      // Tapping a gap-list row selects that waypoint.
-      await page.click("#profile .pf-gap-table tbody tr:nth-child(3)");
+      // Tapping a shear-list row selects that waypoint.
+      await page.click("#profile .pf-gap-table tbody tr:nth-child(6)");
       assert.equal(await page.textContent("#pfDetail h3"), "FGHIJ");
     });
 
@@ -236,7 +243,7 @@ test("app in the browser", { skip: !chromium && "Playwright not installed" }, as
         await pick(p, PDF);
         const m = await p.evaluate(() => {
           const wrap = document.querySelector(".table-wrap");
-          const cells = [...document.querySelectorAll("#chart tbody td:not(.turb)")];
+          const cells = [...document.querySelectorAll("#chart tbody td")];
           const lines = (c) => { const r = document.createRange(); r.selectNodeContents(c); return new Set([...r.getClientRects()].map((x) => Math.round(x.top))).size; };
           return {
             pageOverflow: document.documentElement.scrollWidth - window.innerWidth,

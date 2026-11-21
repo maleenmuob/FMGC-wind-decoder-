@@ -48,15 +48,14 @@ test("rows side by side on one line are both found", () => {
   assert.equal(warnings.length, 0);
 });
 
-test("chart: insert rule, * markers, wrap, turbulence", () => {
+test("chart: insert rule, * markers, wrap, no turbulence column", () => {
   const { rows } = findWindRows(SAMPLE_LINES);
   const chart = buildChart(rows, LEVEL_SETS["3"], RULES.more);
   // BRAVO (360 vs 360) and CHAR1 (010 vs 360 = 10°) are not entries.
   assert.deepEqual(chart.map((c) => c.wp), ["ALPHA", "DELTA", "ECHO", "FOXT", "GOLF"]);
   assert.deepEqual(chart[0].cells.map((c) => c.text), ["360/28/-40", "360/26/-51", "360/24/-59"]);
   assert.deepEqual(chart[1].cells.map((c) => c.text), ["030/45/-39*", "030/24/-50*", "030/22/-58*"]);
-  assert.deepEqual(chart[1].flags, ["⚠️ FL340 shear 5"]);
-  assert.deepEqual(chart[2].flags, ["🔴 FL380 shear 6"]);
+  assert.deepEqual(Object.keys(chart[1]), ["no", "wp", "cells"]);
   // FOXT: positive temperature, 40° jump
   assert.equal(chart[3].cells[0].text, "080/40/+2*");
   // GOLF vs FOXT: all levels change
@@ -78,8 +77,12 @@ test("text report has the Python layout", () => {
   const txt = reportText(rows, buildChart(rows, levels, RULES.more), levels, RULES.more);
   assert.match(txt, /^--- RAW WIND & TEMP ROWS\nFormat: WP FL180 FL240 FL300 FL340 FL380 FL410\nSelected for chart: FL340 \/ FL380 \/ FL410\n---\n/);
   assert.match(txt, /\nRule: More sensitive \(20° \/ 20 kt \/ 5°C\)\n/);
-  assert.match(txt, /No\.  Waypoint   FL340        FL380        FL410        Turbulence/);
-  assert.match(txt, /\n2    DELTA      030\/45\/-39\*  030\/24\/-50\*  030\/22\/-58\*  ⚠️ FL340 shear 5/);
+  assert.match(txt, /\nNo\.  Waypoint   FL340        FL380        FL410\n/);
+  assert.doesNotMatch(txt, /Turbulence|shear|⚠️|🔴/);
+  assert.match(txt, /\n2    DELTA      030\/45\/-39\*  030\/24\/-50\*  030\/22\/-58\*\n/);
+  // An optional first line names the flight plan.
+  const titled = reportText(rows, buildChart(rows, levels, RULES.more), levels, RULES.more, "TST123 · PPPP → QQQQ");
+  assert.match(titled, /^TST123 · PPPP → QQQQ\n\n--- RAW WIND & TEMP ROWS/);
 });
 
 test("itemsToLines joins split fragments by position", () => {
