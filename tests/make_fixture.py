@@ -1,21 +1,19 @@
-# Builds tests/fixtures/sample.pdf from the made-up rows in tests/sample-rows.js.
-# Tokens are drawn as separate pieces (and some rows character by character)
-# so the PDF.js line rebuild is actually exercised.
+# Builds the test PDFs from the made-up rows in tests/sample-rows.js.
+#   sample.pdf        - tokens drawn in pieces (some rows character by character)
+#                       so the PDF.js line rebuild is actually exercised
+#   sample-repeat.pdf - the wind table printed twice, and every row drawn twice
+#                       on top of itself ("fake bold"), like some real PDFs do
 import re, pathlib
 from reportlab.pdfgen import canvas
 from reportlab.pdfbase.pdfmetrics import stringWidth
 
 here = pathlib.Path(__file__).parent
 lines = re.findall(r'^\s*"(.*)",\s*$', (here / "sample-rows.js").read_text(), re.M)
-out = here / "fixtures" / "sample.pdf"
-c = canvas.Canvas(str(out), pagesize=(842, 595))
 font, size = "Courier", 10
-y = 540
-for n, ln in enumerate(lines):
-    if n == 7:  # second page for the rest
-        c.showPage(); y = 540
-    c.setFont(font, size)
-    x = 40
+
+
+def draw_line(c, ln, y, n, dx=0.0):
+    x = 40 + dx
     for tok in re.split(r"(\s+)", ln):
         if not tok.strip():
             x += stringWidth(tok, font, size); continue
@@ -28,6 +26,25 @@ for n, ln in enumerate(lines):
             c.drawString(x, y, "-" + b); x += stringWidth("-" + b, font, size)
         else:
             c.drawString(x, y, tok); x += stringWidth(tok, font, size)
-    y -= 16
-c.save()
-print("wrote", out)
+
+
+def build(name, copies=1, overprint=False):
+    out = here / "fixtures" / name
+    c = canvas.Canvas(str(out), pagesize=(842, 595))
+    for _ in range(copies):
+        y = 540
+        for n, ln in enumerate(lines):
+            if n == 7:  # rest of the table on the next page
+                c.showPage(); y = 540
+            c.setFont(font, size)
+            draw_line(c, ln, y, n)
+            if overprint:
+                draw_line(c, ln, y, n, dx=0.4)
+            y -= 16
+        c.showPage()
+    c.save()
+    print("wrote", out)
+
+
+build("sample.pdf")
+build("sample-repeat.pdf", copies=2, overprint=True)

@@ -7,7 +7,7 @@
  * Returns an array of line strings, top to bottom.
  */
 export function itemsToLines(items) {
-  const frags = items.filter((it) => it.str && it.str.length);
+  const frags = dropOverprint(items.filter((it) => it.str && it.str.length));
   if (!frags.length) return [];
   frags.sort((a, b) => a.y - b.y || a.x - b.x);
 
@@ -38,6 +38,24 @@ export function itemsToLines(items) {
       return line.replace(/\s+/g, " ").trim();
     })
     .filter(Boolean);
+}
+
+/**
+ * Some PDFs fake bold text by drawing the same text twice, almost on top of
+ * itself. Keep only one copy so rows don't come out doubled.
+ */
+function dropOverprint(frags) {
+  const byText = new Map();
+  const out = [];
+  for (const f of frags) {
+    const tol = Math.max(1, (f.h || 10) * 0.3);
+    const prev = byText.get(f.str) || [];
+    if (f.str.trim() && prev.some((p) => Math.abs(p.x - f.x) <= tol && Math.abs(p.y - f.y) <= tol)) continue;
+    prev.push(f);
+    byText.set(f.str, prev);
+    out.push(f);
+  }
+  return out;
 }
 
 /** Convert one PDF.js page into position-sorted text items. */

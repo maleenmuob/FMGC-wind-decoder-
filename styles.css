@@ -52,6 +52,7 @@ body {
   padding-right: max(16px, env(safe-area-inset-right));
 }
 .top h1 { margin: 0; font-size: 1.25rem; }
+.ver { font-size: .8rem; font-weight: 600; opacity: .75; margin-left: 6px; vertical-align: middle; }
 .pill {
   font-size: .8rem;
   padding: 3px 10px;

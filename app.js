@@ -1,5 +1,6 @@
-import { LEVEL_SETS, RULES, findWindRows, buildChart, reportText } from "./decoder.js";
+import { LEVEL_SETS, RULES, analyze } from "./decoder.js";
 import { pdfToLines } from "./pdf-lines.js";
+import { APP_VERSION } from "./version.js";
 
 const $ = (id) => document.getElementById(id);
 const store = {
@@ -7,17 +8,21 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
 };
 
+$("version").textContent = APP_VERSION;
+
 const state = {
   levels: store.get("levels", "3"),
   rule: store.get("rule", "standard"),
   custom: (() => {
     try { return JSON.parse(store.get("custom", "")) || null; } catch { return null; }
   })() || { dir: 20, spd: 20, tmp: 5 },
-  rows: null,
-  warnings: [],
-  fileName: "",
+  // The current PDF: its text lines are kept so button changes can re-run on it.
+  pdf: null, // { name, pages, lines }
   lastText: "",
 };
+
+// Every file pick gets a new id; results from an older pick are thrown away.
+let fileRun = 0;
 
 // ---------- settings UI ----------
 function selectIn(groupId, attr, value) {
@@ -47,29 +52,31 @@ function syncSettings() {
 
 $("levels").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-levels]");
-  if (!b) return;
+  if (!b || b.dataset.levels === state.levels) return; // already selected: nothing to do
   state.levels = b.dataset.levels;
   store.set("levels", state.levels);
   syncSettings();
-  render();
+  run();
 });
 
 $("rules").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-rule]");
-  if (!b) return;
+  if (!b || b.dataset.rule === state.rule) return;
   state.rule = b.dataset.rule;
   store.set("rule", state.rule);
   syncSettings();
-  render();
+  run();
 });
 
 for (const [id, key] of [["cDir", "dir"], ["cSpd", "spd"], ["cTmp", "tmp"]]) {
   $(id).addEventListener("input", () => {
     const v = $(id).value.trim();
-    state.custom[key] = /^\d+$/.test(v) ? parseInt(v, 10) : null;
+    const next = /^\d+$/.test(v) ? parseInt(v, 10) : null;
+    if (next === state.custom[key]) return;
+    state.custom[key] = next;
     store.set("custom", JSON.stringify(state.custom));
     syncSettings();
-    render();
+    run();
   });
 }
 
@@ -80,7 +87,7 @@ function loadPdfjs() {
     pdfjsPromise = import("./vendor/pdfjs/pdf.min.mjs").then((lib) => {
       lib.GlobalWorkerOptions.workerSrc = new URL("./vendor/pdfjs/pdf.worker.min.mjs", import.meta.url).href;
       return lib;
-    });
+    }).catch((err) => { pdfjsPromise = null; throw err; });
   }
   return pdfjsPromise;
 }
@@ -95,26 +102,19 @@ $("file").addEventListener("change", async (e) => {
   e.target.value = ""; // allow choosing the same file again
   if (!file) return;
 
-  state.rows = null;
-  state.fileName = file.name;
-  $("results").hidden = true;
-  $("warnBox").hidden = true;
+  const id = ++fileRun;
+  state.pdf = null;
+  clearResults();
   setStatus(`Reading ${file.name}…`);
 
   try {
     const [lib, buf] = await Promise.all([loadPdfjs(), file.arrayBuffer()]);
     const { lines, pages } = await pdfToLines(lib, new Uint8Array(buf));
-    const { rows, warnings } = findWindRows(lines);
-    state.warnings = warnings;
-    if (!rows.length) {
-      renderWarnings();
-      setStatus(`⚠️ Could not find valid wind rows in ${file.name}.`, true);
-      return;
-    }
-    state.rows = rows;
-    setStatus(`Using: ${file.name} — ${pages} page${pages === 1 ? "" : "s"}, ${rows.length} wind rows.`);
-    render();
+    if (id !== fileRun) return; // a newer file was picked meanwhile
+    state.pdf = { name: file.name, pages, lines };
+    run();
   } catch (err) {
+    if (id !== fileRun) return;
     console.error(err);
     const msg = err && err.name === "PasswordException"
       ? "this PDF is password protected"
@@ -131,43 +131,62 @@ function el(tag, props = {}, text) {
   return n;
 }
 
-function renderWarnings() {
+/** Remove every trace of the previous run. */
+function clearResults() {
+  $("results").hidden = true;
+  $("raw").textContent = "";
+  $("chart").replaceChildren();
+  $("warnList").replaceChildren();
+  $("warnBox").hidden = true;
+  state.lastText = "";
+}
+
+function showWarnings(warnings) {
+  const items = [...warnings];
+  if (currentRule().fallback) items.unshift({ reason: "Invalid custom rule. Using 20 / 20 / 5.", line: "" });
   const list = $("warnList");
-  list.replaceChildren();
-  const rule = currentRule();
-  const items = [...state.warnings];
-  if (rule.fallback) items.unshift({ reason: "Invalid custom rule. Using 20 / 20 / 5.", line: "" });
-  for (const w of items) {
+  list.replaceChildren(...items.map((w) => {
     const li = el("li", {}, w.reason);
-    if (w.line) {
-      li.append(el("br"), el("code", {}, w.line));
-    }
-    list.append(li);
-  }
+    if (w.line) li.append(el("br"), el("code", {}, w.line));
+    return li;
+  }));
   $("warnBox").hidden = items.length === 0;
 }
 
-function render() {
-  renderWarnings();
-  if (!state.rows) return;
+/**
+ * One run: decode the current PDF with the current buttons and show exactly
+ * one fresh copy of the results. Safe to call any number of times.
+ */
+function run() {
+  clearResults();
+  const pdf = state.pdf;
+  if (!pdf) {
+    showWarnings([]);
+    return;
+  }
 
   const levels = LEVEL_SETS[state.levels];
   const rule = currentRule();
-  const chart = buildChart(state.rows, levels, rule);
+  const res = analyze(pdf.lines, levels, rule);
+  showWarnings(res.warnings);
+
+  if (!res.rows.length) {
+    setStatus(`⚠️ Could not find valid wind rows in ${pdf.name}.`, true);
+    return;
+  }
+  const rep = res.repeated ? ` (${res.repeated} repeated row${res.repeated === 1 ? "" : "s"} ignored)` : "";
+  setStatus(`Using: ${pdf.name} — ${pdf.pages} page${pdf.pages === 1 ? "" : "s"}, ${res.rows.length} wind rows${rep}.`);
 
   $("selLevels").textContent = levels.join(" / ");
   $("selRule").textContent = `${rule.dir}° / ${rule.spd} kt / ${rule.tmp}°C`;
-  $("raw").textContent = state.rows.map((r) => r.raw).join("\n");
+  $("raw").textContent = res.rows.map((r) => r.raw).join("\n");
 
-  const table = $("chart");
-  table.replaceChildren();
   const head = el("tr");
   for (const h of ["No.", "Waypoint", ...levels, "Turbulence"]) head.append(el("th", {}, h));
   const thead = el("thead");
   thead.append(head);
-  table.append(thead);
   const body = el("tbody");
-  for (const r of chart) {
+  for (const r of res.chart) {
     const tr = el("tr");
     tr.append(el("td", {}, String(r.no)), el("td", {}, r.wp));
     for (const c of r.cells) {
@@ -178,9 +197,9 @@ function render() {
     if (r.cells.some((c) => c.turb === "red")) tr.className = "has-red";
     body.append(tr);
   }
-  table.append(body);
+  $("chart").replaceChildren(thead, body);
 
-  state.lastText = reportText(state.rows, chart, levels, rule);
+  state.lastText = res.text;
   $("results").hidden = false;
 }
 
@@ -202,29 +221,29 @@ addEventListener("online", updateNet);
 addEventListener("offline", updateNet);
 updateNet();
 
+// A new version installs itself in the background when the app is opened
+// online. The page then reloads to it straight away, unless results are on
+// screen; in that case an Update button is shown so nothing is lost.
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("./sw.js").then((reg) => {
-    const offerUpdate = (w) => {
-      $("update").hidden = false;
-      $("reload").onclick = () => w.postMessage("skipWaiting");
-    };
-    if (reg.waiting && navigator.serviceWorker.controller) offerUpdate(reg.waiting);
-    reg.addEventListener("updatefound", () => {
-      const w = reg.installing;
-      w && w.addEventListener("statechange", () => {
-        if (w.state === "installed" && navigator.serviceWorker.controller) offerUpdate(w);
-      });
-    });
-  }).catch((err) => console.warn("Service worker failed:", err));
-
-  // Reload only when an update replaces an existing version, not on first install.
   const hadController = !!navigator.serviceWorker.controller;
   let reloading = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
     if (reloading || !hadController) return;
+    if (state.pdf) {
+      $("update").hidden = false;
+      $("reload").onclick = () => location.reload();
+      return;
+    }
     reloading = true;
     location.reload();
   });
+
+  navigator.serviceWorker.register("./sw.js", { updateViaCache: "none" }).then((reg) => {
+    // Home Screen apps are often resumed rather than reopened: check then too.
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible" && navigator.onLine) reg.update().catch(() => {});
+    });
+  }).catch((err) => console.warn("Service worker failed:", err));
 }
 
 syncSettings();

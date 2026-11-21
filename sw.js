@@ -1,6 +1,7 @@
 // Offline cache for the FMGC Wind Decoder.
-// Bump VERSION whenever any app file changes so iPads pick up the update.
-const VERSION = "v1";
+// Must match APP_VERSION in version.js. Bump both for every change:
+// a changed sw.js is what makes installed copies download the new version.
+const VERSION = "v8.0";
 const CACHE = `fmgc-wind-${VERSION}`;
 const ASSETS = [
   "./",
@@ -9,6 +10,7 @@ const ASSETS = [
   "./app.js",
   "./decoder.js",
   "./pdf-lines.js",
+  "./version.js",
   "./manifest.webmanifest",
   "./vendor/pdfjs/pdf.min.mjs",
   "./vendor/pdfjs/pdf.worker.min.mjs",
@@ -17,8 +19,14 @@ const ASSETS = [
   "./icons/apple-touch-icon.png",
 ];
 
+// Download the new version, then take over right away (no waiting for every
+// tab to close), so the next open online shows the new version.
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS.map((u) => new Request(u, { cache: "reload" })))));
+  e.waitUntil(
+    caches.open(CACHE)
+      .then((c) => c.addAll(ASSETS.map((u) => new Request(u, { cache: "reload" }))))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener("activate", (e) => {
@@ -27,10 +35,6 @@ self.addEventListener("activate", (e) => {
       .then((keys) => Promise.all(keys.filter((k) => k.startsWith("fmgc-wind-") && k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
-});
-
-self.addEventListener("message", (e) => {
-  if (e.data === "skipWaiting") self.skipWaiting();
 });
 
 // Cache first; only same-origin GET requests are ever handled.

@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, access } from "node:fs/promises";
+import { APP_VERSION } from "../version.js";
 import * as pdfjs from "../vendor/pdfjs/pdf.min.mjs";
-import { decodeWind, dirDiff, fmt, findWindRows, buildChart, reportText, RULES, LEVEL_SETS } from "../decoder.js";
+import { analyze, decodeWind, dirDiff, fmt, findWindRows, buildChart, reportText, RULES, LEVEL_SETS } from "../decoder.js";
 import { pdfToLines, itemsToLines } from "../pdf-lines.js";
 import { SAMPLE_LINES } from "./sample-rows.js";
 
@@ -98,4 +99,38 @@ test("PDF.js reads the fixture PDF into the same rows", async () => {
   const fromText = findWindRows(SAMPLE_LINES);
   assert.deepEqual(fromPdf.rows, fromText.rows);
   assert.equal(fromPdf.warnings.length, 1);
+});
+
+test("running twice gives exactly one identical set of results", () => {
+  const levels = LEVEL_SETS["3"];
+  const a = analyze(SAMPLE_LINES, levels, RULES.standard);
+  const b = analyze(SAMPLE_LINES, levels, RULES.standard);
+  assert.deepEqual(b, a);
+  assert.equal(b.rows.length, 8);
+  assert.equal(b.text.match(/RAW WIND & TEMP ROWS/g).length, 1);
+  assert.equal(b.text.match(/^ALPHA /gm).length, 1);
+});
+
+test("a wind table printed twice is counted once", () => {
+  const { rows, repeated } = findWindRows([...SAMPLE_LINES, ...SAMPLE_LINES]);
+  assert.equal(rows.length, 8);
+  assert.equal(repeated, 8);
+});
+
+test("PDF with a repeated table and fake-bold text gives one set of rows", async () => {
+  const data = new Uint8Array(await readFile(new URL("./fixtures/sample-repeat.pdf", import.meta.url)));
+  const { lines } = await pdfToLines(pdfjs, data);
+  const fromPdf = findWindRows(lines);
+  assert.deepEqual(fromPdf.rows, findWindRows(SAMPLE_LINES).rows);
+  assert.equal(fromPdf.repeated, 8);
+});
+
+test("app version matches the service worker version, and every cached file exists", async () => {
+  const sw = await readFile(new URL("../sw.js", import.meta.url), "utf8");
+  const swVersion = /const VERSION = "([^"]+)"/.exec(sw)[1];
+  assert.equal(swVersion, APP_VERSION);
+  assert.match(APP_VERSION, /^v\d+\.\d+$/);
+  const assets = [...sw.matchAll(/^\s*"\.\/([^"]*)",?$/gm)].map((m) => m[1]).filter(Boolean);
+  assert.ok(assets.length > 5);
+  for (const a of assets) await access(new URL("../" + a, import.meta.url));
 });

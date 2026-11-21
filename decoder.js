@@ -101,11 +101,15 @@ function isWaypoint(tok) {
  * A row is a waypoint followed by six valid wind tokens (FL180..FL410).
  * Rows are searched anywhere in a line, so two tables printed side by side
  * on the same line are both found.
- * Returns { rows: [{wp, tokens[6], raw}], warnings: [{line, reason}] }.
+ * A row that exactly repeats an earlier one (same waypoint, same six tokens),
+ * e.g. because the PDF prints the wind table twice, is counted once.
+ * Returns { rows: [{wp, tokens[6], raw}], warnings: [{line, reason}], repeated }.
  */
 export function findWindRows(lines) {
   const rows = [];
   const warnings = [];
+  const seen = new Set();
+  let repeated = 0;
 
   for (const ln of lines) {
     const parts = ln.split(/\s+/).filter(Boolean);
@@ -120,9 +124,16 @@ export function findWindRows(lines) {
 
       const wp = parts[i];
       const bad = six.filter((t) => !decodeWind(t));
-      rows.push({ wp, tokens: six, raw: `${wp.padEnd(5)} ${six.join(" ")}` });
       for (let k = i; k < i + 7; k++) used[k] = true;
       foundInLine = true;
+      const key = `${wp} ${six.join(" ")}`;
+      if (seen.has(key)) {
+        repeated++;
+        i += 6;
+        continue;
+      }
+      seen.add(key);
+      rows.push({ wp, tokens: six, raw: `${wp.padEnd(5)} ${six.join(" ")}` });
       if (bad.length) {
         warnings.push({ line: ln.trim(), reason: `${wp}: can't decode ${bad.join(", ")}` });
       }
@@ -140,7 +151,14 @@ export function findWindRows(lines) {
       });
     }
   }
-  return { rows, warnings };
+  return { rows, warnings, repeated };
+}
+
+/** Everything one run produces, built from scratch each time. */
+export function analyze(lines, levels, rule) {
+  const { rows, warnings, repeated } = findWindRows(lines);
+  const chart = buildChart(rows, levels, rule);
+  return { rows, warnings, repeated, chart, text: reportText(rows, chart, levels, rule) };
 }
 
 /**
